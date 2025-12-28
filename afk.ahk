@@ -55,8 +55,17 @@ Gui, 3: Destroy
 GuiControl, 1:, WindowCount, 0
 GuiControl, 2:, TimerDisplay, % FormatSeconds(timerCountdown)
 
-SetTimer, UpdateWindowCount, -50
-SetTimer, UpdateWindowCount, -300
+Gui, 2: +AlwaysOnTop -Caption +LastFound +ToolWindow
+Gui, 2: Color, 010101
+WinSet, TransColor, 010101
+Gui, 2: Font, s22 w900 cFF0000, Arial Black
+Gui, 2: Add, Text, vTimerDisplay Center w250, % FormatSeconds(timerCountdown)
+Gui, 2: Show, % "x" . (A_ScreenWidth - 260) . " y10 NoActivate", TimerOverlay
+
+SetTimer, CheckIntervalFile, 1000
+
+SetTimer, UpdateWindowCount, 2000
+UpdateWindowCount()
 
 SetTimer, CloseSettingsOnce, -150
 CloseSettingsOnce:
@@ -204,7 +213,7 @@ OpenSettings:
 
     StringReplace, i1unit, i1unit, %A_Space%, , All
     StringReplace, i2unit, i2unit, %A_Space%, , All
-    GuiControl, 3: , I1Unit, ms|s|min|h
+    GuiControl, 3: , I1Unit, |ms|s|min|h
     if (i1unit = "ms")
         GuiControl, 3: Choose, I1Unit, 1
     else if (i1unit = "s")
@@ -214,7 +223,7 @@ OpenSettings:
     else if (i1unit = "h")
         GuiControl, 3: Choose, I1Unit, 4
 
-    GuiControl, 3: , I2Unit, ms|s|min|h
+    GuiControl, 3: , I2Unit, |ms|s|min|h
     if (i2unit = "ms")
         GuiControl, 3: Choose, I2Unit, 1
     else if (i2unit = "s")
@@ -290,12 +299,18 @@ SaveSettings:
     activeInterval := ActiveInterval + 0
     clickInterval := (activeInterval = 1) ? interval1 : interval2
 
+    FileCopy, %A_ScriptFullPath%, %A_ScriptFullPath% ".bak", 1
     FileDelete, %A_ScriptFullPath%
     FileAppend, %s%, %A_ScriptFullPath%
 
-    MsgBox, 64, Saved, Settings saved. Reloading script...
-    Sleep, 300
-    Reload
+    FileRead, newS, %A_ScriptFullPath%
+    if (InStr(newS, "interval1 := " . i1) && InStr(newS, "interval2 := " . i2)) {
+        TrayTip, Roblox AFK, Settings saved. Reloading..., 1
+        Sleep, 300
+        Reload
+    } else {
+        MsgBox, 48, Error, Failed to save settings. Please try again or check file permissions.
+    }
 Return
 
 ConvertToMs(num, unit) {
@@ -362,34 +377,36 @@ FormatInterval(ms, ByRef outNum, ByRef outUnit) {
 
 
 
-Gui, 2: +AlwaysOnTop -Caption +LastFound +ToolWindow
-Gui, 2: Color, 010101
-WinSet, TransColor, 010101
-Gui, 2: Font, s22 w900 cFF0000, Arial Black
-Gui, 2: Add, Text, vTimerDisplay Center w250, % FormatSeconds(timerCountdown)
-Gui, 2: Show, % "x" . (A_ScreenWidth - 260) . " y10 NoActivate", TimerOverlay
-WinSet, AlwaysOnTop, On, TimerOverlay
-WinShow, TimerOverlay
-GuiControl, 2:, TimerDisplay, % FormatSeconds(timerCountdown)
-SetTimer, EnsureTimerVisible, 1000
-EnsureTimerVisible:
-    if !WinExist("TimerOverlay") {
-        Gui, 2: Show, % "x" . (A_ScreenWidth - 260) . " y10 NoActivate", TimerOverlay
-        WinSet, TransColor, 010101
-        WinSet, AlwaysOnTop, On, TimerOverlay
-        WinShow, TimerOverlay
+CheckIntervalFile() {
+    file := A_ScriptDir "\afk_interval.txt"
+    if !FileExist(file)
+        return
+    FileRead, s, %file%
+    FileDelete, %file%
+    s := Trim(s)
+    RegExMatch(s, "i)^\s*(\d+)\s*(ms|s|sec|secs|m|min|mins|h|hour|hours)?\s*$", m)
+    if (m1) {
+        val := m1
+        unit := m2
+        if (unit = "" || unit = "ms") {
+            ms := val
+        } else if InStr(unit, "h") {
+            ms := val * 3600000
+        } else if InStr(unit, "m") {
+            ms := val * 60000
+        } else {
+            ms := val * 1000
+        }
+        clickInterval := ms
+        timerCountdown := clickInterval // 1000
         GuiControl, 2:, TimerDisplay, % FormatSeconds(timerCountdown)
-    } else {
-        WinSet, AlwaysOnTop, On, TimerOverlay
+        if (isRunning) {
+            SetTimer, ClickRobloxWindows, Off
+            SetTimer, ClickRobloxWindows, %clickInterval%
+            SetTimer, UpdateCountdown, 1000
+        }
     }
-Return
-
-SetTimer, UpdateWindowCount, 5000
-UpdateWindowCount()
-SetTimer, UpdateWindowCount, -200
-UpdateWindowCountDelayed:
-    UpdateWindowCount()
-Return
+}
 
 F2::
     if (settingsOpen) {
@@ -410,6 +427,11 @@ F2::
     }
 Return
 
+
+F3::
+    StopScript()
+    CloseGui()
+Return
 
 F4::
     if (settingsOpen) {
