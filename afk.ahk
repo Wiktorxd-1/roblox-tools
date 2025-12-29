@@ -3,7 +3,7 @@ SetTitleMatchMode, 3
 
 isRunning := false
 totalWindows := 0
-interval1 := 420000
+interval1 := 36000
 interval2 := 840000
 activeInterval := 1
 clickInterval := (activeInterval = 1) ? interval1 : interval2
@@ -455,9 +455,20 @@ F4::
 Return
 
 F5::
-    abortNow := true
-    StopScript()
-    RestorePreviousWindow()
+    if (isRunning) {
+        abortNow := true
+        SetTimer, ClickRobloxWindows, Off
+        RestorePreviousWindow()
+
+    
+        timerCountdown := clickInterval // 1000
+        notifPlayed := false
+        GuiControl, 2:, TimerDisplay, % FormatSeconds(timerCountdown)
+        SetTimer, ClickRobloxWindows, %clickInterval%
+        SetTimer, UpdateCountdown, 1000
+    } else {
+        RestorePreviousWindow()
+    }
 Return
 
 F7::
